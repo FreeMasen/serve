@@ -66,18 +66,24 @@ async fn spawn_index_generator(root: PathBuf, index_path: impl AsRef<Path>) {
 async fn do_index_gen(
     root: impl AsRef<Path>,
     index: impl AsRef<Path>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let list = generate_file_list(&root).await?;
+) -> Result<(), Error> {
+    if !root.as_ref().exists() {
+        ::log::warn!("Root no longer exists at {}", root.as_ref().display());
+        return Ok(());
+    }
+    let list = generate_file_list(&root).await.unwrap_or_default();
     write_index_html(index, list.into_iter()).await?;
     Ok(())
 }
 
 async fn generate_file_list(
     path: impl AsRef<Path>,
-) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let mut rd = tokio::fs::read_dir(path.as_ref()).await?;
+) -> Result<Vec<String>, Error> {
+    let mut rd = tokio::fs::read_dir(path.as_ref()).await.map_err(|e| {
+        Error::ReadDir(format!("Error reading {}: {e}", path.as_ref().display()))
+    })?;
     let mut ret = Vec::new();
-    while let Some(entry) = rd.next_entry().await? {
+    while let Some(entry) = rd.next_entry().await.map_err(|e| Error::Entry(format!("Error looking up next entry: {e}")))? {
         let Ok(ft) = entry.file_type().await else {
             continue;
         };
@@ -95,7 +101,7 @@ async fn generate_file_list(
 async fn write_index_html(
     path: impl AsRef<Path>,
     files: impl Iterator<Item = String>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Error> {
     let mut f = tokio::fs::File::options()
         .write(true)
         .create(true)
@@ -115,4 +121,15 @@ async fn write_index_html(
     }
     f.write_all(INDEX_SUFFIX.as_bytes()).await?;
     Ok(())
+}
+
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("{0}")]
+    ReadDir(String),
+    #[error("{0}")]
+    Entry(String),
+
 }
