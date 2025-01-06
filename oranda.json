@@ -1,0 +1,8 @@
+{
+    "build": {
+        "path_prefix": "serve"
+    },
+    "styles": {
+        "theme": "hacker"
+    }
+}
