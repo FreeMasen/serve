@@ -1,6 +1,6 @@
 [package]
 name = "serve"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["rfm <r@robertmasen.pizza>"]
 edition = "2018"
 repository = "https://github.com/FreeMasen/serve"
@@ -11,7 +11,7 @@ description = "serve a directory"
 log = "0.4"
 pretty_env_logger = "0.5"
 tempfile = "3"
-thiserror = "1"
+thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 axum = "0.8"
 

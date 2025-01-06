@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use axum::{response::Html, Router};
+use axum::{response::IntoResponse, Router};
 use tokio::io::AsyncWriteExt;
 
 const INDEX_PREFIX: &str = "<!DOCTYPE html><html><head></head><body><main><ul>";
@@ -85,15 +85,22 @@ fn parse_args() -> Args {
     ret
 }
 
-async fn read_path(path: PathBuf) -> Html<String> {
+async fn read_path(mut path: PathBuf) -> Response {
+    if path.is_dir() {
+        path = path.join("index.html")
+    }
     log::debug!("reading {}", path.display());
-    Html(
-        tokio::fs::read_to_string(path.clone())
-            .await
-            .unwrap_or_else(|e| {
-                format!("{INDEX_PREFIX}<li><pre><code>{e}</code></pre></li>{INDEX_SUFFIX}")
-            }),
-    )
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("html");
+    let inner = match tokio::fs::read(path.clone()).await {
+        Ok(inner) => inner,
+        Err(e) => return Response::Html(format!("{INDEX_PREFIX}<li><pre><code>{e}</code></pre></li>{INDEX_SUFFIX}").as_bytes().to_vec())
+    };
+    match ext {
+        "css" => Response::Css(inner),
+        "js" => Response::Js(inner),
+        "wasm" => Response::Wasm(inner),
+        _ => Response::Html(inner),
+    }
 }
 
 async fn spawn_index_generator(root: PathBuf, index_path: impl AsRef<Path>) {
@@ -170,4 +177,31 @@ enum Error {
     ReadDir(String),
     #[error("{0}")]
     Entry(String),
+}
+
+enum Response {
+    Html(Vec<u8>),
+    Css(Vec<u8>),
+    Js(Vec<u8>),
+    Wasm(Vec<u8>)
+}
+
+impl IntoResponse for Response {
+    fn into_response(self) -> axum::response::Response {
+        let res = axum::response::Response::builder();
+        match self {
+            Response::Html(vec) => {
+                res.header("content-type", "text/html").body(vec.into()).unwrap()
+            }
+            Response::Css(vec) => {
+                res.header("content-type", "text/css").body(vec.into()).unwrap()
+            }
+            Response::Js(vec) => {
+                res.header("content-type", "application/javascript").body(vec.into()).unwrap()
+            }
+            Response::Wasm(vec) => {
+                res.header("content-type", "application/wasm").body(vec.into()).unwrap()
+            }
+        }
+    }
 }
