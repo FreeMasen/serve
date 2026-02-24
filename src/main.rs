@@ -93,16 +93,19 @@ async fn read_path(mut path: PathBuf) -> Response {
         path = path.join("index.html")
     }
     log::debug!("reading {}", path.display());
-    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("html");
+    let ext = path.extension().and_then(|s| s.to_str());
     let inner = match tokio::fs::read(path.clone()).await {
         Ok(inner) => inner,
         Err(e) => return Response::Html(format!("{INDEX_PREFIX}<li><pre><code>{e}</code></pre></li>{INDEX_SUFFIX}").as_bytes().to_vec())
     };
     match ext {
-        "css" => Response::Css(inner),
-        "js" | "mjs" => Response::Js(inner),
-        "wasm" => Response::Wasm(inner),
-        _ => Response::Html(inner),
+        Some("css") => Response::Css(inner),
+        Some("js" | "mjs") => Response::Js(inner),
+        Some("wasm") => Response::Wasm(inner),
+        Some("json") => Response::Json(inner),
+        Some("html") => Response::Html(inner),
+        Some("txt") | None => Response::Text(inner),
+        Some(_) => Response::Octet(inner),
     }
 }
 
@@ -186,7 +189,10 @@ enum Response {
     Html(Vec<u8>),
     Css(Vec<u8>),
     Js(Vec<u8>),
-    Wasm(Vec<u8>)
+    Wasm(Vec<u8>),
+    Json(Vec<u8>),
+    Text(Vec<u8>),
+    Octet(Vec<u8>),
 }
 
 impl IntoResponse for Response {
@@ -204,6 +210,15 @@ impl IntoResponse for Response {
             }
             Response::Wasm(vec) => {
                 res.header("content-type", "application/wasm").body(vec.into()).unwrap()
+            }
+            Response::Json(vec) => {
+                res.header("content-type", "application/json").body(vec.into()).unwrap()
+            }
+            Response::Text(vec) => {
+                res.header("content-type", "text/plain").body(vec.into()).unwrap()
+            }
+            Response::Octet(vec) => {
+                res.header("content-type", "application/octet-stream").body(vec.into()).unwrap()
             }
         }
     }
