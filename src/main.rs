@@ -8,6 +8,9 @@ const INDEX_SUFFIX: &str = "</ul></body></html>";
 
 #[tokio::main]
 async fn main() {
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "serve=info");
+    }
     pretty_env_logger::init();
     let Args { root, prefix, port } = parse_args();
 
@@ -97,7 +100,7 @@ async fn read_path(mut path: PathBuf) -> Response {
     };
     match ext {
         "css" => Response::Css(inner),
-        "js" => Response::Js(inner),
+        "js" | "mjs" => Response::Js(inner),
         "wasm" => Response::Wasm(inner),
         _ => Response::Html(inner),
     }
