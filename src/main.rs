@@ -33,11 +33,12 @@ async fn main() {
         move |uri: axum::http::Uri| async move {
             log::trace!("getting {uri}");
             let path = uri.path().trim_start_matches(&prefix);
+
             let path = if path == "" || path == "/" || path == "/index.html" || path == "index.htm"
             {
                 index_path.clone()
             } else {
-                base_path.join(path)
+                base_path.join(&percent_encoding::percent_decode_str(path).decode_utf8_lossy()[..])
             };
             let ret = read_path(path).await.into_response();
             log::info!("{uri} {0} {0:?}", ret.status());

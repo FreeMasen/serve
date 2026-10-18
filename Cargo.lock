@@ -619,6 +619,7 @@ version = "0.1.6"
 dependencies = [
  "axum",
  "log",
+ "percent-encoding",
  "pretty_env_logger",
  "tempfile",
  "thiserror",
