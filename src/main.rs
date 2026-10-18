@@ -39,7 +39,9 @@ async fn main() {
             } else {
                 base_path.join(path)
             };
-            read_path(path).await
+            let ret = read_path(path).await.into_response();
+            log::info!("{uri} {0} {0:?}", ret.status());
+            ret
         }
     };
 
@@ -94,9 +96,16 @@ async fn read_path(mut path: PathBuf) -> Response {
     }
     log::debug!("reading {}", path.display());
     let ext = path.extension().and_then(|s| s.to_str());
+
     let inner = match tokio::fs::read(path.clone()).await {
         Ok(inner) => inner,
-        Err(e) => return Response::Html(format!("{INDEX_PREFIX}<li><pre><code>{e}</code></pre></li>{INDEX_SUFFIX}").as_bytes().to_vec())
+        Err(e) => {
+            return Response::Html(
+                format!("{INDEX_PREFIX}<li><pre><code>{e}</code></pre></li>{INDEX_SUFFIX}")
+                    .as_bytes()
+                    .to_vec(),
+            )
+        }
     };
     match ext {
         Some("css") => Response::Css(inner),
@@ -104,6 +113,7 @@ async fn read_path(mut path: PathBuf) -> Response {
         Some("wasm") => Response::Wasm(inner),
         Some("json") => Response::Json(inner),
         Some("html") => Response::Html(inner),
+        Some("pdf") => Response::Pdf(inner),
         Some("txt") | None => Response::Text(inner),
         Some(_) => Response::Octet(inner),
     }
@@ -192,34 +202,31 @@ enum Response {
     Wasm(Vec<u8>),
     Json(Vec<u8>),
     Text(Vec<u8>),
+    Pdf(Vec<u8>),
     Octet(Vec<u8>),
 }
 
 impl IntoResponse for Response {
     fn into_response(self) -> axum::response::Response {
-        let res = axum::response::Response::builder();
+        let (ct, bytes) = self.resp_parts();
+        axum::response::Response::builder()
+            .header("content-type", ct)
+            .body(bytes.into())
+            .unwrap()
+    }
+}
+
+impl Response {
+    fn resp_parts(self) -> (&'static str, Vec<u8>) {
         match self {
-            Response::Html(vec) => {
-                res.header("content-type", "text/html").body(vec.into()).unwrap()
-            }
-            Response::Css(vec) => {
-                res.header("content-type", "text/css").body(vec.into()).unwrap()
-            }
-            Response::Js(vec) => {
-                res.header("content-type", "application/javascript").body(vec.into()).unwrap()
-            }
-            Response::Wasm(vec) => {
-                res.header("content-type", "application/wasm").body(vec.into()).unwrap()
-            }
-            Response::Json(vec) => {
-                res.header("content-type", "application/json").body(vec.into()).unwrap()
-            }
-            Response::Text(vec) => {
-                res.header("content-type", "text/plain").body(vec.into()).unwrap()
-            }
-            Response::Octet(vec) => {
-                res.header("content-type", "application/octet-stream").body(vec.into()).unwrap()
-            }
+            Self::Html(items) => ("text/html", items),
+            Self::Css(items) => ("text/css", items),
+            Self::Js(items) => ("application/javascript", items),
+            Self::Wasm(items) => ("application/wasm", items),
+            Self::Json(items) => ("application/json", items),
+            Self::Text(items) => ("application/pdf", items),
+            Self::Pdf(items) => ("text/plain", items),
+            Self::Octet(items) => ("application/octet-stream", items),
         }
     }
 }
